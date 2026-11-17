@@ -13,27 +13,34 @@ function pageList(page, total) {
   return out;
 }
 
+// seed baru tiap kali halaman di-refresh → urutan acak berbeda, tapi tetap sama saat ganti halaman/back
+const SEED = Math.random().toString(36).slice(2, 10);
+const LIMITS = [12, 24, 30, 48, 60, 100];
+const DEFAULTS = { sort: "random", limit: "30", page: "1" };
+
 export default function Home() {
   const [params, setParams] = useSearchParams();
   const q = params.get("q") || "";
   const folder = params.get("folder") || "";
-  const sort = params.get("sort") === "title" ? "title" : "newest";
+  const sort = ["newest", "title"].includes(params.get("sort")) ? params.get("sort") : "random";
   const page = Math.max(1, parseInt(params.get("page"), 10) || 1);
+  const limit = LIMITS.includes(Number(params.get("limit"))) ? Number(params.get("limit")) : 30;
 
-  const qs = new URLSearchParams({ q, folder, sort, page, limit: 30 });
+  const qs = new URLSearchParams({ q, folder, sort, page, limit, seed: SEED });
   const { data, isPending, isError, error, refetch, isPlaceholderData } = useQuery({
-    queryKey: ["videos", q, folder, sort, page],
+    queryKey: ["videos", q, folder, sort, page, limit],
     queryFn: () => api(`/api/videos?${qs}`),
     placeholderData: keepPreviousData,
   });
 
   const set = (key, value) => {
     const next = new URLSearchParams(params);
-    value && value !== 1 && value !== "newest" ? next.set(key, value) : next.delete(key);
+    value && String(value) !== DEFAULTS[key] ? next.set(key, value) : next.delete(key);
     if (key !== "page") next.delete("page");
     setParams(next);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+  const sel = "rounded-full bg-zinc-800/80 px-4 py-2 text-sm outline-none ring-indigo-500 focus:ring-2";
   const btn = "min-w-9 rounded-full px-3 py-1.5 text-sm disabled:opacity-30";
 
   return (
@@ -44,14 +51,19 @@ export default function Home() {
           {folder && <> di <span className="text-zinc-200">{folder}</span></>}
           {q && <> untuk “<span className="text-zinc-200">{q}</span>”</>}
         </p>
-        <select value={sort} onChange={(e) => set("sort", e.target.value)} aria-label="Urutkan"
-          className="rounded-full bg-zinc-800/80 px-4 py-2 text-sm outline-none ring-indigo-500 focus:ring-2">
-          <option value="newest">Terbaru</option>
-          <option value="title">Judul (A–Z)</option>
-        </select>
+        <div className="flex gap-2">
+          <select value={sort} onChange={(e) => set("sort", e.target.value)} aria-label="Urutkan" className={sel}>
+            <option value="random">Acak</option>
+            <option value="newest">Terbaru</option>
+            <option value="title">Judul (A–Z)</option>
+          </select>
+          <select value={limit} onChange={(e) => set("limit", e.target.value)} aria-label="Video per halaman" className={sel}>
+            {LIMITS.map((n) => <option key={n} value={n}>{n} / halaman</option>)}
+          </select>
+        </div>
       </div>
 
-      {isPending ? <SkeletonGrid /> : isError ? <ErrorState error={error} onRetry={refetch} /> : !data.items.length ? <Empty /> : (
+      {isPending ? <SkeletonGrid n={limit > 24 ? 24 : limit} /> : isError ? <ErrorState error={error} onRetry={refetch} /> : !data.items.length ? <Empty /> : (
         <div className={`${GRID} transition-opacity ${isPlaceholderData ? "opacity-50" : ""}`}>
           {data.items.map((v) => <VideoCard key={v._id} v={v} />)}
         </div>
